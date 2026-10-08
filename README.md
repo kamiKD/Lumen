@@ -49,12 +49,14 @@ python main.py --minimized
 
 ## Build do .exe
 
-```bat
-build_release.bat
+O binario pronto esta na aba **Releases**. Para compilar localmente:
+
+```
+python -m PyInstaller --noconfirm --clean Lumen.spec
 ```
 
 Gera `dist\Lumen.exe` standalone (PyInstaller, sem exigir Python).
-`build.bat` gera build de desenvolvimento.
+Para um build de desenvolvimento, acrescente `--windowed --name Lumen-dev`.
 
 ## Recursos
 
@@ -89,7 +91,7 @@ src/
   hotkey_manager.py    RegisterHotKey global
   settings_manager.py  config.json + logs
   autostart.py  HKCU Run + active.flag
-requirements.txt  build.bat  build_release.bat
+requirements.txt  Lumen.spec
 config/default_config.json
 ```
 

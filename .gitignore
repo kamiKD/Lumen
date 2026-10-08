@@ -1,4 +1,4 @@
-﻿# --- PyInstaller build artifacts (gerados por build.bat / build_release.bat) ---
+﻿# --- PyInstaller build artifacts ---
 build/
 dist/
 *.manifest
@@ -16,7 +16,7 @@ env/
 
 # --- Ferramentas de terceiros vendorizadas ---
 # UPX e um binario baixado de https://github.com/upx/upx/releases
-# (build_release.bat usa se achar no PATH e avisa se faltar).
+# (usado pelo Lumen.spec se o PyInstaller achar no PATH).
 tools/upx/
 
 # --- Config local / dados do usuario ---
