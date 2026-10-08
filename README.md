@@ -95,7 +95,7 @@ config/default_config.json
 
 ## Interface
 
-A janela e dividida em um cabecalho fixo e quatro abas.
+A janela e dividida em um cabecalho fixo e tres abas.
 
 **Cabecalho** — chip de estado (ON/OFF), botao principal de toggle, botao
 Restaurar, seletor de monitor, chip de HDR e o botao **Diagnostico**.
@@ -118,18 +118,16 @@ vinculado e um asterisco nos perfis com alteracoes nao salvas. Duplo clique
 aplica; clique direito abre o menu de acoes. O botao Salvar fica
 desabilitado quando nao ha nada a salvar.
 
-
-
 **Aba Opcoes** — captura do atalho global, opcoes de inicio, tema
 (Automatico/Claro/Escuro) e as informacoes de hardware, que abrem no
 dialogo de diagnostico sob demanda.
 
 Referencias de comportamento:
 
-- O toggle e a unica fonte de verdade do estado. Aplicacao, bandeja, atalho
-  e watchers passam todos por `_set_gamma_state`, que no fim reescreve o
-  botao e a config — inclusive quando a aplicacao falha, caso em que o
-  estado volta para OFF em vez de a UI afirmar um "ON" que nao aconteceu.
+- O toggle e a unica fonte de verdade do estado. Aplicacao, bandeja e atalho
+  passam todos por `_set_gamma_state`, que no fim reescreve o botao e a
+  config — inclusive quando a aplicacao falha, caso em que o estado volta
+  para OFF em vez de a UI afirmar um "ON" que nao aconteceu.
 - Tema Automatico segue o Windows (`colorScheme` do sistema).
 - Posicao e tamanho da janela sao lembrados entre sessoes.
 - Mensagens de sucesso (perfil salvo, atalho definido) aparecem numa barra
