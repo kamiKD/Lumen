@@ -11,6 +11,18 @@ import re
 import shutil
 import subprocess
 
+# Impede que cada subprocesso abra uma janela de console que so pisca.
+# No .exe (subsistema GUI) um wmic/powershell/nvidia-smi sem esta flag cria
+# um console proprio que aparece por ~200ms e some. CREATE_NO_WINDOW = 0x08000000.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
+
+def _run(argv, timeout: int) -> str:
+    """Saida de um comando externo, sem janela de console e sem stderr."""
+    return subprocess.check_output(
+        argv, text=True, timeout=timeout,
+        stderr=subprocess.DEVNULL, creationflags=_NO_WINDOW)
+
 
 def classify_vendor(name: str) -> str:
     n = (name or "").lower()
@@ -42,10 +54,8 @@ def _run_nvidia_smi() -> str:
         if not p:
             continue
         try:
-            out = subprocess.check_output(
-                [p, "--query-gpu=name,driver_version",
-                 "--format=csv,noheader"],
-                text=True, timeout=10, stderr=subprocess.DEVNULL)
+            out = _run([p, "--query-gpu=name,driver_version",
+                        "--format=csv,noheader"], timeout=10)
             if out and out.strip():
                 return out.strip()
         except Exception:
@@ -100,10 +110,8 @@ def _wmi_video_controllers() -> list[dict]:
 
     # 1) wmic (formato csv: Node,DriverVersion,Name)
     try:
-        out = subprocess.check_output(
-            ["wmic", "path", "win32_VideoController",
-             "get", "name,DriverVersion", "/format:csv"],
-            text=True, timeout=15, stderr=subprocess.DEVNULL)
+        out = _run(["wmic", "path", "win32_VideoController",
+                    "get", "name,DriverVersion", "/format:csv"], timeout=15)
         for line in out.splitlines():
             line = line.strip()
             if not line or line.startswith("Node"):
@@ -121,10 +129,8 @@ def _wmi_video_controllers() -> list[dict]:
         ps = ("Get-CimInstance Win32_VideoController | "
               "Select-Object Name,DriverVersion | "
               "ForEach-Object { $_.Name + '|' + $_.DriverVersion }")
-        out = subprocess.check_output(
-            ["powershell", "-NoProfile", "-NonInteractive",
-             "-Command", ps],
-            text=True, timeout=20, stderr=subprocess.DEVNULL)
+        out = _run(["powershell", "-NoProfile", "-NonInteractive",
+                    "-WindowStyle", "Hidden", "-Command", ps], timeout=20)
         for line in out.splitlines():
             line = line.strip()
             if not line or "|" not in line:
