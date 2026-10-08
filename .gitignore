@@ -1,0 +1,36 @@
+﻿# --- PyInstaller build artifacts (gerados por build.bat / build_release.bat) ---
+build/
+dist/
+*.manifest
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Ferramentas de terceiros vendorizadas ---
+# UPX e um binario baixado de https://github.com/upx/upx/releases
+# (build_release.bat usa se achar no PATH e avisa se faltar).
+tools/upx/
+
+# --- Config local / dados do usuario ---
+# Em runtime o app usa %APPDATA%\Lumen\, entao nada cai aqui.
+# Mantido so por seguranca caso algum dev aponte a config para a raiz.
+config.json
+*.local.json
+
+# --- Logs e temporarios ---
+*.log
+*.tmp
+*.bak
+*.orig
+active.flag
+screenshot*.png
+Thumbs.db
+Desktop.ini

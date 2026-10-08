@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "gamma": 1.0,
+  "brightness": 50.0,
+  "contrast": 50.0,
+  "monitor": null,
+  "gpu": "",
+  "keybind": "F8",
+  "gamma_on": false,
+  "restore_on_exit": true,
+  "start_with_windows": false,
+  "start_minimized": false,
+  "active_profile": "Default",
+  "profiles": {
+    "Default": { "gamma": 1.0, "brightness": 50.0, "contrast": 50.0, "monitor": null, "gpu": "" },
+    "Gaming": { "gamma": 1.8, "brightness": 55.0, "contrast": 60.0, "monitor": null, "gpu": "" },
+    "CS2": { "gamma": 1.5, "brightness": 55.0, "contrast": 65.0, "monitor": null, "gpu": "" },
+    "Valorant": { "gamma": 1.4, "brightness": 52.0, "contrast": 62.0, "monitor": null, "gpu": "" },
+    "Minecraft": { "gamma": 1.6, "brightness": 55.0, "contrast": 58.0, "monitor": null, "gpu": "" },
+    "Dark": { "gamma": 2.2, "brightness": 48.0, "contrast": 65.0, "monitor": null, "gpu": "" },
+    "Osu! EZ": { "gamma": 0.5, "brightness": 50.0, "contrast": 50.0, "monitor": null, "gpu": "" },
+    "Osu! NM": { "gamma": 1.0, "brightness": 50.0, "contrast": 50.0, "monitor": null, "gpu": "" },
+    "Custom": { "gamma": 1.8, "brightness": 50.0, "contrast": 60.0, "monitor": null, "gpu": "" }
+  }
+}

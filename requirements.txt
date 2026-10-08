@@ -1,0 +1,7 @@
+PySide6>=6.7
+pyinstaller>=6.0
+# Opcional — so enriquece a deteccao em maquinas NVIDIA.
+# O app funciona com AMD, Intel, video integrado e sem GPU dedicada
+# mesmo sem este pacote (SetDeviceGammaRamp e vendor-agnostic).
+# Descomente se quiser detalhe extra via NVML em maquina NVIDIA:
+# nvidia-ml-py>=12.0
