@@ -47,9 +47,21 @@ python main.py
 python main.py --minimized
 ```
 
+## Download
+
+Pronto para Windows 10/11 x64, sem instalar Python:
+
+**[Baixar Lumen v1.0.0](https://github.com/kamiKD/Lumen/releases/latest)**
+
+O executavel nao e assinado digitalmente, entao o SmartScreen pode mostrar
+"Windows protegeu seu PC" na primeira execucao: clique em **Mais
+informacoes** → **Executar assim mesmo**. Para nao ver o aviso de novo,
+clique com o botao direito no `Lumen.exe` → Propriedades → marque
+**Desbloquear**.
+
 ## Build do .exe
 
-O binario pronto esta na aba **Releases**. Para compilar localmente:
+Para compilar localmente:
 
 ```
 python -m PyInstaller --noconfirm --clean Lumen.spec
