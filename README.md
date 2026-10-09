@@ -109,32 +109,37 @@ config/default_config.json
 
 ## Interface
 
-A janela e dividida em um cabecalho fixo e tres abas.
+Segue o visual do Windows 11: barra lateral de navegacao a esquerda, com
+pilula de selecao no item ativo, e cards de agrupamento na area de conteudo.
+
+A janela e dividida em um cabecalho fixo e tres paginas.
 
 **Cabecalho** — chip de estado (ON/OFF), botao principal de toggle, botao
 Restaurar, seletor de monitor, chip de HDR e o botao **Diagnostico**.
-Fica sempre visivel, inclusive ao trocar de aba.
+Fica sempre visivel, inclusive ao trocar de pagina.
 
 **Banner** — aparece abaixo do cabecalho para HDR ativo ou falha de gamma.
 Mostra a causa provavel, esconde o detalhe tecnico em "Detalhes" e traz a
 acao que resolve (abrir configuracoes de tela / guia). Nao bloqueia a janela
 com modal.
 
-**Aba Gamma** — os tres sliders (Gamma, Brilho, Contraste) com rotulos
+**Navegacao** — barra lateral com Gamma, Perfis e Opcoes. O item ativo fica
+com pilula de selecao, como no painel do Windows.
+
+**Gamma** — os tres sliders (Gamma, Brilho, Contraste) com rotulos
 alinhados em coluna e o valor numerico a direita, ao lado da **curva
 resultante**: o grafico da LUT que sera aplicada, com a curva neutra
 (gamma 1.0) tracejada como referencia. O texto abaixo dos sliders muda
 conforme o estado do toggle, para ficar claro quando as mudancas entram
 na tela.
 
-**Aba Perfis** — lista com o nome e os valores de cada perfil, o monitor
+**Perfis** — lista com o nome e os valores de cada perfil, o monitor
 vinculado e um asterisco nos perfis com alteracoes nao salvas. Duplo clique
 aplica; clique direito abre o menu de acoes. O botao Salvar fica
-desabilitado quando nao ha nada a salvar.
+desabilitado quando nao ha nada a salvar. `Default` vem sempre primeiro.
 
-**Aba Opcoes** — captura do atalho global, opcoes de inicio, tema
-(Automatico/Claro/Escuro) e as informacoes de hardware, que abrem no
-dialogo de diagnostico sob demanda.
+**Opcoes** — tres cards (Atalho global, Inicializacao, Aparencia) com uma
+linha por ajuste. O diagnostico abre pelo botao do cabecalho.
 
 Referencias de comportamento:
 

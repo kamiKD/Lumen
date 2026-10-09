@@ -15,6 +15,130 @@ from PySide6.QtWidgets import (
 
 from .theme import repolish
 
+# Glifos usados na navegacao lateral. A fonte de icones do sistema (Segoe
+# Fluent Icons) nao e garantida em toda instalacao, entao a navegacao usa
+# texto so — o Windows 11 tambem cai para texto quando o icone falha.
+NAV_ITEMS = [
+    ("Gamma", "Ajuste de gamma, brilho e contraste"),
+    ("Perfis", "Presets salvos por monitor"),
+    ("Opcoes", "Atalho, inicio e tema"),
+]
+
+
+# ------------------------------------------------------------ navegacao
+
+class NavRail(QFrame):
+    """Barra lateral de navegacao no estilo Windows 11.
+
+    Substitui o QTabWidget: item ativo vira uma pilula com barra de acento
+    a esquerda. Emite `changed(str)` com o nome da pagina selecionada.
+    """
+
+    changed = Signal(str)
+
+    def __init__(self, titles: list[tuple[str, str]], parent=None):
+        super().__init__(parent)
+        self.setObjectName("navRail")
+        self.setFixedWidth(196)
+        v = QVBoxLayout(self)
+        v.setContentsMargins(8, 12, 8, 12)
+        v.setSpacing(2)
+
+        # Cabecalho da nav: identidade do app, como o bloco de usuario do
+        # Windows 11 (avatar + nome + subtitulo).
+        user = QWidget()
+        uv = QVBoxLayout(user)
+        uv.setContentsMargins(8, 4, 8, 12)
+        uv.setSpacing(1)
+        name = QLabel("Lumen")
+        name.setObjectName("navUser")
+        sub = QLabel("Controle de gamma")
+        sub.setObjectName("navUserSub")
+        uv.addWidget(name)
+        uv.addWidget(sub)
+        v.addWidget(user)
+
+        self._buttons: dict[str, QPushButton] = {}
+        for title, sub in titles:
+            btn = QPushButton(title)
+            btn.setObjectName("navItem")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(sub)
+            btn.clicked.connect(lambda _c, t=title: self.select(t))
+            self._buttons[title] = btn
+            v.addWidget(btn)
+        v.addStretch(1)
+        self.select(titles[0][0])
+
+    def select(self, title: str) -> None:
+        for t, b in self._buttons.items():
+            b.setChecked(t == title)
+        self.changed.emit(title)
+
+    def current(self) -> str:
+        for t, b in self._buttons.items():
+            if b.isChecked():
+                return t
+        return ""
+
+
+class CardRow(QFrame):
+    """Linha de card: titulo + subtitulo + controle opcional.
+
+    Reproduz o bloco do Windows 11 (icone, titulo, descricao, chevron),
+    com hover no card inteiro em vez de so no texto.
+    """
+
+    def __init__(self, title: str, subtitle: str = "", control=None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("cardRow")
+        h = QHBoxLayout(self)
+        h.setContentsMargins(16, 12, 16, 12)
+        h.setSpacing(14)
+        col = QVBoxLayout()
+        col.setSpacing(2)
+        lbl = QLabel(title)
+        lbl.setObjectName("cardTitle")
+        col.addWidget(lbl)
+        if subtitle:
+            sub = QLabel(subtitle)
+            sub.setObjectName("cardSub")
+            sub.setWordWrap(True)
+            col.addWidget(sub)
+        h.addLayout(col, 1)
+        self._slot = h
+        if control is not None:
+            self.add_control(control)
+
+    def add_control(self, widget) -> None:
+        """Adiciona o controle do lado direito da linha."""
+        self._slot.addWidget(widget, 0, Qt.AlignVCenter)
+
+
+class Card(QFrame):
+    """Card com titulo de secao e linhas empilhadas (padrao Win11)."""
+
+    def __init__(self, title: str = "", parent=None):
+        super().__init__(parent)
+        self.setObjectName("card")
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+        self._v = v
+        if title:
+            head = QLabel(title)
+            head.setObjectName("sectionTitle")
+            # Alinha com o texto das linhas (que tem padding de 16px).
+            wrap = QWidget()
+            hv = QVBoxLayout(wrap)
+            hv.setContentsMargins(16, 0, 0, 0)
+            hv.addWidget(head)
+            v.addWidget(wrap)
+
+    def add(self, widget) -> None:
+        self._v.addWidget(widget)
+
 # Teclas aceitas pelo dialogo de captura. O campo de texto antigo aceitava
 # qualquer nome de `VK_NAMES`, mas `normalize_keybind` so sabe reescrever
 # F-keys, letras e digitos — nomes como SPACE viravam "VK(0x20)" e quebravam
@@ -176,7 +300,7 @@ class LabeledSlider(QWidget):
         self.slider.setTracking(True)
 
         self.lbl_value = QLabel()
-        self.lbl_value.setMinimumWidth(58)
+        self.lbl_value.setMinimumWidth(52)
         self.lbl_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         f = QFont()
         f.setStyleHint(QFont.Monospace)
@@ -216,7 +340,7 @@ class GammaCurve(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(180, 110)
+        self.setMinimumSize(190, 130)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._curve: list[float] = []
 

@@ -17,6 +17,8 @@ from PySide6.QtWidgets import QApplication
 # ---------------------------------------------------------------- tokens
 
 # Espacamento e raio sao compartilhados pelas duas variantes.
+# RADIUS 6 e o raio do Windows 11 para controles interativos; os cards
+# maiores usam 8 (o Win11 usa raio grande so em superficies flutuantes).
 SPACE = {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24}
 RADIUS = 6
 FONT_PT = 10
@@ -24,55 +26,65 @@ FONT_STACK = '"Segoe UI", "Inter", system-ui, sans-serif'
 MONO_STACK = '"Cascadia Mono", Consolas, "Courier New", monospace'
 
 LIGHT = {
-    "bg": "#f2f4f7",
+    # Paleta do Windows 11: fundo #f3f3f3 (Fluent), cards brancos, acento
+    # azul do sistema, selecao de nav cinza-azulada translucida.
+    "bg": "#f3f3f3",
     "surface": "#ffffff",
-    "surface_alt": "#f7f8fa",
-    "border": "#e0e4ea",
-    "border_strong": "#c6ccd5",
-    "text": "#1a1e23",
-    "text_muted": "#58616d",
-    "text_faint": "#8a929c",
-    "accent": "#2f6feb",
-    "accent_hover": "#2559c4",
-    "accent_soft": "#e8f0fe",
-    "on": "#1a8f4c",
-    "on_deep": "#15703c",
-    "on_soft": "#e3f5ea",
-    "off": "#78828d",
-    "off_soft": "#eceef1",
-    "warn": "#a86500",
-    "warn_soft": "#fdf4e3",
-    "warn_border": "#e9c88c",
-    "error": "#c2352a",
-    "error_soft": "#fdeceb",
-    "error_border": "#f0b4af",
-    "track": "#d9dee5",
+    "surface_alt": "#f9f9f9",
+    "nav": "#f3f3f3",
+    "nav_hover": "#e9e9ec",
+    "nav_active": "#e0e0e6",
+    "border": "#e5e5e5",
+    "border_strong": "#cccccc",
+    "text": "#1a1a1a",
+    "text_muted": "#5d5d5d",
+    "text_faint": "#8a8a8a",
+    "accent": "#0067c0",
+    "accent_hover": "#0053a6",
+    "accent_soft": "#eff6fc",
+    "on": "#0f7b0f",
+    "on_deep": "#0b5c0b",
+    "on_soft": "#eef7ee",
+    "off": "#616161",
+    "off_soft": "#f0f0f0",
+    "warn": "#9d5d00",
+    "warn_soft": "#fff8e6",
+    "warn_border": "#f2d9a8",
+    "error": "#b10e1c",
+    "error_soft": "#fdf3f4",
+    "error_border": "#f2c0c4",
+    "track": "#d6d6d6",
 }
 
 DARK = {
-    "bg": "#0f1115",
-    "surface": "#15181d",
-    "surface_alt": "#1b1f26",
-    "border": "#232830",
-    "border_strong": "#2f3540",
-    "text": "#e8eaed",
-    "text_muted": "#9aa3af",
-    "text_faint": "#5c6672",
-    "accent": "#4f8cff",
-    "accent_hover": "#6ba0ff",
-    "accent_soft": "#141c2e",
-    "on": "#34d399",
-    "on_deep": "#10b981",
-    "on_soft": "#0a1f16",
-    "off": "#6b7280",
-    "off_soft": "#1a1e24",
-    "warn": "#f59e0b",
-    "warn_soft": "#1f1a0e",
-    "warn_border": "#3d2f18",
-    "error": "#ef4444",
-    "error_soft": "#2a1515",
-    "error_border": "#4a1f1f",
-    "track": "#1f242c",
+    # Windows 11 escuro: fundo #202020, cards #2b2b2b, acento #4cc2ff,
+    # selecao de nav com pílula translucida sobre o fundo.
+    "bg": "#202020",
+    "surface": "#2b2b2b",
+    "surface_alt": "#323232",
+    "nav": "#202020",
+    "nav_hover": "#2a2a2a",
+    "nav_active": "#343434",
+    "border": "#3d3d3d",
+    "border_strong": "#4a4a4a",
+    "text": "#ffffff",
+    "text_muted": "#c5c5c5",
+    "text_faint": "#8a8a8a",
+    "accent": "#4cc2ff",
+    "accent_hover": "#6ccfff",
+    "accent_soft": "#123552",
+    "on": "#6ccb5f",
+    "on_deep": "#5ab04f",
+    "on_soft": "#16301a",
+    "off": "#9a9a9a",
+    "off_soft": "#2e2e2e",
+    "warn": "#fce100",
+    "warn_soft": "#332a00",
+    "warn_border": "#5c4d00",
+    "error": "#ff99a4",
+    "error_soft": "#3a1c20",
+    "error_border": "#663338",
+    "track": "#4a4a4a",
 }
 
 PREFERENCES = ("auto", "light", "dark")
@@ -232,7 +244,10 @@ QListWidget::item { border-radius: 6px; padding: 2px; color: ${text}; }
 QListWidget::item:selected { background: ${accent_soft}; color: ${text}; }
 QListWidget::item:hover:!selected { background: ${surface_alt}; }
 
-/* ---------------------------------------------------------- abas */
+/* ---------------------------------------------------------- abas
+   O Windows 11 nao usa abas: a navegacao fica numa barra lateral com
+   pilula de selecao. As regras do QTabWidget continuam para o Dialogo
+   de Diagnostico, que usa abas de verdade. */
 QTabWidget::pane {
     border: 1px solid ${border};
     border-radius: 8px;
@@ -256,6 +271,51 @@ QTabBar::tab:selected {
     border-bottom-color: ${surface};
 }
 QTabBar::tab:hover:!selected { color: ${text}; background: ${surface_alt}; }
+
+/* ------------------------------------------------- navegacao lateral
+   Pilula de selecao como no Windows 11: item ativo ganha fundo
+   arredondado e uma barra de acento na esquerda. */
+QFrame#navRail {
+    background: ${nav};
+    border: none;
+    border-right: 1px solid ${border};
+}
+QPushButton#navItem {
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 9px 12px;
+    text-align: left;
+    color: ${text};
+    font-size: ${font_pt}pt;
+}
+QPushButton#navItem:hover { background: ${nav_hover}; }
+QPushButton#navItem:checked {
+    background: ${nav_active};
+    color: ${text};
+    font-weight: 600;
+}
+QLabel#navUser    { font-weight: 600; font-size: 11pt; }
+QLabel#navUserSub { color: ${text_muted}; font-size: 9pt; }
+
+/* ------------------------------------------------------ cartoes
+   Cards como os blocos do Windows 11: fundo ${surface}, borda sutil,
+   raio 8, e a linha interna com hover levemente destacado. */
+QFrame#card {
+    background: ${surface};
+    border: 1px solid ${border};
+    border-radius: 8px;
+}
+QFrame#cardRow {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid ${border};
+}
+QFrame#cardRow:last { border-bottom: none; }
+QFrame#cardRow:hover { background: ${surface_alt}; }
+QLabel#cardTitle { font-weight: 600; font-size: ${font_pt}pt; }
+QLabel#cardSub   { color: ${text_muted}; font-size: 9pt; }
+QLabel#sectionTitle { font-size: 14pt; font-weight: 600; }
 
 /* ---------------------------------------------------------- chips */
 QLabel#chip {
@@ -300,6 +360,12 @@ QFrame#curvePanel {
     border: none;
     border-radius: 8px;
 }
+/* A curva da aba Gamma vira card quando marcada com property="card". */
+QFrame#curvePanel[card="true"] {
+    background: ${surface};
+    border: 1px solid ${border};
+    border-radius: 8px;
+}
 QLabel#statusBar {
     background: ${accent_soft};
     color: ${text};
@@ -310,6 +376,18 @@ QLabel#statusBar[kind="error"] { background: ${error_soft}; color: ${error}; }
 QLabel#statusBar[kind="ok"]    { background: ${on_soft};    color: ${on}; }
 QLabel#hint      { color: ${text_faint}; background: transparent; }
 QLabel#subtitle  { color: ${text_muted}; background: transparent; }
+
+/* Scrollbar discreta, no estilo Win11: fina e sem setas. */
+QScrollArea { background: transparent; border: none; }
+QScrollBar:vertical {
+    background: transparent; width: 12px; margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: ${border_strong}; border-radius: 5px; min-height: 32px;
+}
+QScrollBar::handle:vertical:hover { background: ${text_faint}; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
 """)
 
 

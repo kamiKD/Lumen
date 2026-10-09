@@ -17,8 +17,8 @@ from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFrame, QGroupBox, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox,
-    QPushButton, QSizePolicy, QStyle, QSystemTrayIcon, QTabWidget, QVBoxLayout,
-    QWidget,
+    QPushButton, QSizePolicy, QStackedWidget, QStyle, QSystemTrayIcon,
+    QVBoxLayout, QWidget,
 )
 
 from .settings_manager import SettingsManager
@@ -29,13 +29,53 @@ from .gamma_controller import (
 )
 from . import display_manager, gpu_detector, autostart, theme
 from .ui import (
-    Banner, Chip, DiagnosticsDialog, GammaCurve, KeyGrabDialog,
-    LabeledSlider, ProfileList,
+    Banner, Card, CardRow, Chip, DiagnosticsDialog, GammaCurve, KeyGrabDialog,
+    LabeledSlider, NAV_ITEMS, NavRail, ProfileList,
 )
 # Alias legado: codigo externo ainda pode importar nvidia_controller.
 from . import nvidia_controller  # noqa: F401
 
 import os
+
+
+class _NavTabsShim:
+    """Fachada de `QTabWidget` sobre a pilha de paginas.
+
+    A janela migrou de abas para navegacao lateral, mas os testes e o
+    `--ui-selfcheck` consultam `tabs.count()`, `tabs.tabText(i)` e
+    `tabs.setCurrentIndex(i)`. Esta classe mantem essa API funcionando sem
+    duplicar estado: os indices sao os mesmos da ordem em `NAV_ITEMS`.
+    """
+
+    def __init__(self, pages: dict, stack):
+        self._order = [t for t, _ in NAV_ITEMS]
+        self._pages = pages
+        self._stack = stack
+
+    def count(self) -> int:
+        return len(self._order)
+
+    def tabText(self, index: int) -> str:
+        return self._order[index]
+
+    def currentIndex(self) -> int:
+        page = self._stack.currentWidget()
+        for i, title in enumerate(self._order):
+            if self._pages.get(title) is page:
+                return i
+        return -1
+
+    def setCurrentIndex(self, index: int) -> None:
+        """Troca de pagina pela API de abas; a nav acompanha."""
+        if 0 <= index < len(self._order):
+            self._stack.setCurrentWidget(self._pages[self._order[index]])
+            rail = getattr(self._stack, "_nav", None)
+            if rail is not None:
+                rail.select(self._order[index])
+
+    def setCurrentIndex_by_title(self, title: str) -> None:
+        if title in self._pages:
+            self._stack.setCurrentWidget(self._pages[title])
 
 
 def app_icon() -> QIcon:
@@ -120,9 +160,10 @@ class MainWindow(QMainWindow):
         self._banner_kind = "none"
 
         self.setWindowTitle("Lumen — Controle de Gamma (AMD / Intel / NVIDIA)")
-        # 780x620 e o menor tamanho em que o cabecalho (chip + toggle +
-        # restaurar + monitor + HDR + diagnostico) cabe sem elidir nada.
-        self.setMinimumSize(720, 560)
+        # A barra lateral de navegacao (196px) + sliders + curva precisa de
+        # largura. Abaixo de 860 a curva invade os sliders, entao esse e o
+        # piso em vez do antigo 720.
+        self.setMinimumSize(880, 600)
         try:
             self.setWindowIcon(app_icon())
         except Exception:
@@ -172,11 +213,36 @@ class MainWindow(QMainWindow):
         self.banner = Banner()
         root.addWidget(self.banner)
 
-        self.tabs = QTabWidget()
-        root.addWidget(self.tabs, 1)
-        self.tabs.addTab(self._build_tab_gamma(), "Gamma")
-        self.tabs.addTab(self._build_tab_profiles(), "Perfis")
-        self.tabs.addTab(self._build_tab_options(), "Opcoes")
+        # Navegacao lateral no estilo Windows 11 + pilha de paginas.
+        # Antes era um QTabWidget; as abas viraram itens da nav para casar
+        # com o visual do sistema. `tabs` continua existindo como atalho
+        # (os testes e o --ui-selfcheck usam `tabs.count()`/`tabText()`).
+        split = QWidget()
+        sh = QHBoxLayout(split)
+        sh.setContentsMargins(0, 0, 0, 0)
+        sh.setSpacing(0)
+
+        self.nav = NavRail(NAV_ITEMS)
+        self.nav.changed.connect(self._on_nav_changed)
+        sh.addWidget(self.nav)
+
+        self.stack = QStackedWidget()
+        sh.addWidget(self.stack, 1)
+        self._pages: dict[str, QWidget] = {}
+        for title, _sub in NAV_ITEMS:
+            page = {
+                "Gamma": self._build_tab_gamma,
+                "Perfis": self._build_tab_profiles,
+                "Opcoes": self._build_tab_options,
+            }[title]()
+            self._pages[title] = page
+            self.stack.addWidget(page)
+        root.addWidget(split, 1)
+
+        # Fachada de abas sobre o stack, so para os testes/diagnostico.
+        self.tabs = _NavTabsShim(self._pages, self.stack)
+        # Ponteiro invertido para o setCurrentIndex conseguir mover a nav.
+        self.stack._nav = self.nav
 
         self.lbl_status = QLabel()
         self.lbl_status.setObjectName("statusBar")
@@ -243,18 +309,23 @@ class MainWindow(QMainWindow):
         h.addWidget(self.btn_diag)
         return hdr
 
+    def _on_nav_changed(self, title: str) -> None:
+        self.tabs.setCurrentIndex_by_title(title)
+
     # ------------------------------------------------------- UI: aba Gamma
     def _build_tab_gamma(self):
         page = QWidget()
         h = QHBoxLayout(page)
-        h.setContentsMargins(14, 14, 14, 14)
+        h.setContentsMargins(28, 24, 28, 24)
         h.setSpacing(20)
 
         # Sliders section (primary focus) — no GroupBox, clean rows
         sliders_widget = QWidget()
         v = QVBoxLayout(sliders_widget)
         v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(12)
+        v.setSpacing(16)
+        # Alinha ao topo e nao centraliza: os tres sliders ficam agrupados
+        # no alto, como no painel do Windows 11, em vez de flutuar no meio.
         v.setAlignment(Qt.AlignTop)
         self.sld_gamma = LabeledSlider("Gamma", 10, 500, "{}", parent=page)
         self.sld_bri = LabeledSlider("Brilho", 0, 100, "{}%", parent=page)
@@ -270,17 +341,23 @@ class MainWindow(QMainWindow):
         self.lbl_live.setWordWrap(True)
         v.addWidget(self.lbl_live)
         v.addStretch(1)
+        sliders_widget.setMinimumWidth(300)
         h.addWidget(sliders_widget, 4)
 
         # Curve section (smaller, subtle)
         curve = QFrame()
         curve.setObjectName("curvePanel")
+        # Card da curva, como os cards do Windows 11 (fundo + borda sutil).
+        curve.setProperty("card", True)
         cv = QVBoxLayout(curve)
-        cv.setContentsMargins(12, 12, 12, 12)
-        cv.setSpacing(6)
+        cv.setContentsMargins(16, 14, 16, 14)
+        cv.setSpacing(8)
         ttl = QLabel("Curva resultante")
         ttl.setObjectName("subtitle")
         self.gamma_curve = GammaCurve(curve)
+        # O painel da curva fica com largura minima propria: sem isso ele
+        # aceita encolher e invade a coluna dos sliders.
+        curve.setMinimumWidth(230)
         self.gamma_curve.setToolTip(
             "Previa da curva de transferencia. O tracejado e a curva neutra "
             "(gamma 1.0). Abaixo da diagonal escurece as sombras; acima, clareia.")
@@ -293,10 +370,13 @@ class MainWindow(QMainWindow):
     def _build_tab_profiles(self):
         page = QWidget()
         v = QVBoxLayout(page)
-        v.setContentsMargins(14, 14, 14, 14)
+        v.setContentsMargins(28, 24, 28, 24)
         v.setSpacing(10)
 
         self.profile_list = ProfileList(page)
+        # Espaco extra embaixo: com 9 perfis o ultimo item ficava cortado
+        # dentro da area rolavel.
+        self.profile_list.setStyleSheet("QListWidget { padding-bottom: 10px; }")
         self.profile_list.currentItemChanged.connect(
             lambda cur, _prev: self._on_profile_selected(
                 cur.data(Qt.UserRole) if cur else ""))
@@ -341,64 +421,69 @@ class MainWindow(QMainWindow):
     def _build_tab_options(self):
         page = QWidget()
         v = QVBoxLayout(page)
-        v.setContentsMargins(14, 14, 14, 14)
-        v.setSpacing(12)
+        v.setContentsMargins(28, 24, 28, 24)
+        v.setSpacing(18)
 
-        # Hotkey section — no GroupBox
-        kb_widget = QWidget()
-        h = QHBoxLayout(kb_widget)
-        h.setContentsMargins(0, 0, 0, 0)
-        h.setSpacing(8)
+        # --- Card: atalho global (linha com campo + botoes, estilo Win11)
+        card_key = Card("Atalho global")
+        row_key = CardRow(
+            "Alternar gamma",
+            "Ex.: F8, CTRL+F8, ALT+F8, CTRL+ALT+G. Capturar aceita F1-F24, "
+            "letras e numeros.")
         self.edt_key = QLineEdit()
         self.edt_key.setReadOnly(True)
         self.edt_key.setPlaceholderText("F8")
+        self.edt_key.setFixedWidth(150)
         btn_cap = QPushButton("Capturar")
         btn_cap.setToolTip("Clique e pressione a combinacao desejada.")
         btn_cap.clicked.connect(self._on_keybind_capture)
         btn_key = QPushButton("Aplicar")
         btn_key.setProperty("variant", "primary")
         btn_key.clicked.connect(self._on_keybind_apply)
-        h.addWidget(self.edt_key, 1)
-        h.addWidget(btn_cap)
-        h.addWidget(btn_key)
-        v.addWidget(kb_widget)
+        for w in (self.edt_key, btn_cap, btn_key):
+            row_key.add_control(w)
+        card_key.add(row_key)
+        v.addWidget(card_key)
 
-        kh = QLabel("Ex.: F8, CTRL+F8, ALT+F8, CTRL+ALT+G. "
-                    "Capturar aceita F1-F24, letras e numeros.")
-        kh.setObjectName("hint")
-        kh.setWordWrap(True)
-        v.addWidget(kh)
-
-        # Startup section — no GroupBox
-        op_widget = QWidget()
-        ov = QVBoxLayout(op_widget)
-        ov.setContentsMargins(0, 0, 0, 0)
-        ov.setSpacing(6)
-        self.chk_restore = QCheckBox("Restaurar o gamma original ao sair (recomendado)")
+        # --- Card: opcoes de inicializacao (uma linha por checkbox)
+        card_start = Card("Inicializacao")
+        # O texto vem do CardRow (titulo da linha); o QCheckBox fica sem
+        # label para nao repetir a mesma frase duas vezes.
+        self.chk_restore = QCheckBox()
         self.chk_restore.toggled.connect(lambda v: self.s.set("restore_on_exit", v))
-        self.chk_autostart = QCheckBox("Iniciar com o Windows")
-        self.chk_autostart.toggled.connect(self._on_autostart)
-        self.chk_min = QCheckBox("Iniciar minimizado (bandeja)")
-        self.chk_min.toggled.connect(lambda v: self.s.set("start_minimized", v))
-        for c in (self.chk_restore, self.chk_autostart, self.chk_min):
-            ov.addWidget(c)
-        v.addWidget(op_widget)
+        card_start.add(CardRow(
+            "Restaurar o gamma original ao sair",
+            "Volta a rampa neutra do monitor ao fechar o app.", self.chk_restore))
 
-        # Theme section — no GroupBox
-        th_widget = QWidget()
-        tv = QHBoxLayout(th_widget)
-        tv.setContentsMargins(0, 0, 0, 0)
-        tv.setSpacing(8)
-        tv.addWidget(QLabel("Tema:"))
+        self.chk_autostart = QCheckBox()
+        self.chk_autostart.toggled.connect(self._on_autostart)
+        card_start.add(CardRow(
+            "Iniciar com o Windows",
+            "Adiciona o Lumen na inicializacao automatica (HKCU Run).",
+            self.chk_autostart))
+
+        self.chk_min = QCheckBox()
+        self.chk_min.toggled.connect(lambda v: self.s.set("start_minimized", v))
+        card_start.add(CardRow(
+            "Iniciar minimizado",
+            "Abre direto na bandeja, sem mostrar a janela.", self.chk_min))
+        v.addWidget(card_start)
+
+        # --- Card: tema
+        card_theme = Card("Aparencia")
         self.cmb_theme = QComboBox()
+        self.cmb_theme.setFixedWidth(210)
         for key, label in (("auto", "Automatico (seguir o Windows)"),
                            ("light", "Claro"), ("dark", "Escuro")):
             self.cmb_theme.addItem(label, key)
         i = self.cmb_theme.findData(str(self.s.get("ui_theme", "auto")))
         self.cmb_theme.setCurrentIndex(i if i >= 0 else 0)
         self.cmb_theme.currentIndexChanged.connect(self._on_theme_changed)
-        tv.addWidget(self.cmb_theme, 1)
-        v.addWidget(th_widget)
+        card_theme.add(CardRow(
+            "Tema",
+            "Automatico acompanha a configuracao de cor do Windows.",
+            self.cmb_theme))
+        v.addWidget(card_theme)
 
         v.addStretch(1)
         return page
@@ -419,7 +504,7 @@ class MainWindow(QMainWindow):
         scr = QApplication.primaryScreen()
         if scr is None:
             return
-        self.resize(780, 620)
+        self.resize(1000, 680)
         g = self.geometry()
         g.moveCenter(scr.availableGeometry().center())
         self.setGeometry(g)
@@ -1130,12 +1215,12 @@ def _ui_selfcheck() -> int:
     # Varrendo a largura: o problema era o header apertado, entao medimos
     # desde o minimo da janela ate um tamanho confortavel.
     worst = []
-    for width in range(w.minimumWidth(), 1001, 40):
+    for width in range(w.minimumWidth(), 1241, 40):
         w.resize(width, w.height())
         app.processEvents()
         for b in w._check_header_fits():
             worst.append(f"{width}px -> {b}")
-    w.resize(780, 620)
+    w.resize(1000, 680)
     app.processEvents()
     bad = list(worst)
     for name, wid, need in _header_measurements(w):
@@ -1143,17 +1228,13 @@ def _ui_selfcheck() -> int:
         extra = f"  '{w.hdr_chip.text()}'" if name == "chip HDR" else ""
         print(f"{flag:9} {name:12} precisa {need:4d}px / tem {wid:4d}px{extra}")
     print(f"janela: {w.width()}x{w.height()}  (min {w.minimumWidth()}px)")
-    print(f"varridas: {len(worst)} problema(s) entre {w.minimumWidth()} e 1000px")
+    print(f"varridas: {len(worst)} problema(s) entre {w.minimumWidth()} e 1240px")
     if bad:
         print("RESULTADO: FALHOU -> " + "; ".join(bad))
         w.hk.stop()
-        w.osu.stop()
-        w.fw.stop()
         return 1
     print("RESULTADO: OK")
     w.hk.stop()
-    w.osu.stop()
-    w.fw.stop()
     return 0
 
 

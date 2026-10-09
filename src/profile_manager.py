@@ -7,7 +7,14 @@ class ProfileManager:
         self.s = settings
 
     def names(self) -> list[str]:
-        return sorted(self.s.data.get("profiles", {}).keys())
+        """Nomes em ordem de exibicao: Default primeiro, resto alfabeticamente.
+
+        Antes era so `sorted()`, que deixava 'Default' entre 'CS2' e 'Dark'.
+        O README trata Default como o perfil base, entao ele vai no topo.
+        """
+        profiles = self.s.data.get("profiles", {})
+        rest = sorted(k for k in profiles if k != "Default")
+        return (["Default"] if "Default" in profiles else []) + rest
 
     def get(self, name: str) -> dict | None:
         return self.s.data.get("profiles", {}).get(name)
