@@ -331,22 +331,21 @@ QFrame#navRail {
     background: ${nav};
     border: none;
 }
-QPushButton#navItem {
+QFrame#navItem {
     background: transparent;
     border: none;
     border-radius: 4px;
     border-left: 3px solid transparent;
-    padding: 9px 12px 9px 9px;
-    text-align: left;
     color: ${text};
-    font-size: ${font_pt}pt;
 }
-QPushButton#navItem:hover { background: ${nav_hover}; }
-QPushButton#navItem:checked {
+QFrame#navItem:hover { background: ${nav_hover}; }
+QFrame#navItem[selected="true"] {
     background: ${nav_active};
+    border-left: 3px solid ${accent};
+}
+QFrame#navItem[selected="true"] QLabel {
     color: ${text};
     font-weight: 600;
-    border-left: 3px solid ${accent};
 }
 QLabel#navUser    { font-weight: 600; font-size: 11pt; }
 QLabel#navUserSub { color: ${text_muted}; font-size: 9pt; }

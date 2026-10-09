@@ -65,10 +65,66 @@ class Chevron(QLabel):
         self.setAlignment(Qt.AlignCenter)
 
 
+class NavItem(QFrame):
+    """Item da navegacao: icone e texto em widgets separados.
+
+    Nao da para colocar o glifo e a palavra no texto do botao: eles
+    dividiriam a mesma fonte, e o QSS global (`QWidget { font-family:
+    Segoe UI }`) se aplicaria aos dois — o glifo viraria quadrado vazio
+    e o texto sairia na fonte de icones. Separando, o icone fica em
+    `Segoe MDL2 Assets` (via #cardIcon) e o texto em Segoe UI.
+    """
+
+    clicked = Signal()
+
+    def __init__(self, title: str, glyph: str, tooltip: str = "",
+                 parent=None):
+        super().__init__(parent)
+        self.setObjectName("navItem")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedHeight(34)
+        if tooltip:
+            self.setToolTip(tooltip)
+
+        h = QHBoxLayout(self)
+        h.setContentsMargins(12, 0, 12, 0)
+        h.setSpacing(12)
+
+        self._icon = QLabel(ICONS.get(glyph, ""))
+        self._icon.setObjectName("cardIcon")
+        self._icon.setFont(icon_font(13))
+        self._icon.setFixedWidth(18)
+        self._icon.setAlignment(Qt.AlignCenter)
+        h.addWidget(self._icon)
+
+        self._text = QLabel(title)
+        h.addWidget(self._text)
+        h.addStretch(1)
+
+        self._selected = False
+        self._update()
+
+    def setSelected(self, on: bool) -> None:
+        if on != self._selected:
+            self._selected = on
+            self._update()
+
+    def isSelected(self) -> bool:
+        return self._selected
+
+    def _update(self) -> None:
+        self.setProperty("selected", "true" if self._selected else "false")
+        repolish(self)
+
+    def mousePressEvent(self, ev):
+        self.clicked.emit()
+        super().mousePressEvent(ev)
+
+
 class NavRail(QFrame):
     """Barra lateral de navegacao no estilo Windows 11.
 
-    Item ativo vira uma pilula com a barra de acento a esquerda.
+    Item ativo ganha pilula e barra de acento a esquerda.
     Emite `changed(str)` com o nome da pagina selecionada.
     """
 
@@ -96,30 +152,23 @@ class NavRail(QFrame):
         uv.addWidget(sub)
         v.addWidget(user)
 
-        self._buttons: dict[str, QPushButton] = {}
+        self._buttons: dict[str, NavItem] = {}
         for title, sub, glyph in items:
-            btn = QPushButton(f"{ICONS[glyph]}   {title}")
-            btn.setObjectName("navItem")
-            # A fonte de icones precisa ir no botao inteiro, senao o QSS
-            # (Segoe UI) sobrescreve e o glyph vira texto.
-            btn.setFont(icon_font(10))
-            btn.setCheckable(True)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setToolTip(sub)
-            btn.clicked.connect(lambda _c, t=title: self.select(t))
-            self._buttons[title] = btn
-            v.addWidget(btn)
+            item = NavItem(title, glyph, sub)
+            item.clicked.connect(lambda t=title: self.select(t))
+            self._buttons[title] = item
+            v.addWidget(item)
         v.addStretch(1)
         self.select(items[0][0])
 
     def select(self, title: str) -> None:
         for t, b in self._buttons.items():
-            b.setChecked(t == title)
+            b.setSelected(t == title)
         self.changed.emit(title)
 
     def current(self) -> str:
         for t, b in self._buttons.items():
-            if b.isChecked():
+            if b.isSelected():
                 return t
         return ""
 
