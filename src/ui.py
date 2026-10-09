@@ -13,42 +13,80 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .theme import repolish
+from .theme import ICONS, icon_font, repolish
 
-# Glifos usados na navegacao lateral. A fonte de icones do sistema (Segoe
-# Fluent Icons) nao e garantida em toda instalacao, entao a navegacao usa
-# texto so — o Windows 11 tambem cai para texto quando o icone falha.
+# Itens da barra lateral: (titulo, subtitulo/tooltip, glifo).
 NAV_ITEMS = [
-    ("Gamma", "Ajuste de gamma, brilho e contraste"),
-    ("Perfis", "Presets salvos por monitor"),
-    ("Opcoes", "Atalho, inicio e tema"),
+    ("Gamma", "Ajuste de gamma, brilho e contraste", "brightness"),
+    ("Perfis", "Presets salvos por monitor", "user"),
+    ("Opcoes", "Atalho, inicio e tema", "settings"),
 ]
 
 
-# ------------------------------------------------------------ navegacao
+# ------------------------------------------------------------ componentes
+
+class PageTitle(QLabel):
+    """Titulo grande de pagina, como no topo de cada pagina do Win11."""
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(text, parent)
+        self.setObjectName("pageTitle")
+        self.setContentsMargins(0, 0, 0, 2)
+
+
+class IconGlyph(QLabel):
+    """Icone da fonte de icones do Windows (Segoe MDL2/Fluent).
+
+    Se a fonte nao existir na maquina, o glyph apareceria como quadrado;
+    por isso `icon_font()` pode devolver fonte vazia e a gente esconde o
+    label, deixando o card so com texto.
+    """
+
+    def __init__(self, key: str, size_pt: int = 15, parent=None):
+        super().__init__(ICONS.get(key, ""), parent)
+        self.setObjectName("cardIcon")
+        self.setAlignment(Qt.AlignCenter)
+        self.setFixedSize(int(size_pt * 1.6), int(size_pt * 1.6))
+        self.setFont(icon_font(size_pt))
+        if ICONS.get(key, ""):
+            self.show()
+        else:
+            self.hide()
+
+
+class Chevron(QLabel):
+    """Seta '>' do lado direito dos cards do Windows 11."""
+
+    def __init__(self, parent=None):
+        super().__init__(ICONS["chevron"], parent)
+        self.setFont(icon_font(13))
+        self.setObjectName("cardSub")
+        self.setFixedWidth(14)
+        self.setAlignment(Qt.AlignCenter)
+
 
 class NavRail(QFrame):
     """Barra lateral de navegacao no estilo Windows 11.
 
-    Substitui o QTabWidget: item ativo vira uma pilula com barra de acento
-    a esquerda. Emite `changed(str)` com o nome da pagina selecionada.
+    Item ativo vira uma pilula com a barra de acento a esquerda.
+    Emite `changed(str)` com o nome da pagina selecionada.
     """
 
     changed = Signal(str)
 
-    def __init__(self, titles: list[tuple[str, str]], parent=None):
+    def __init__(self, items: list[tuple[str, str, str]], parent=None):
         super().__init__(parent)
         self.setObjectName("navRail")
-        self.setFixedWidth(196)
+        self.setFixedWidth(208)
         v = QVBoxLayout(self)
-        v.setContentsMargins(8, 12, 8, 12)
+        v.setContentsMargins(8, 14, 8, 14)
         v.setSpacing(2)
 
         # Cabecalho da nav: identidade do app, como o bloco de usuario do
         # Windows 11 (avatar + nome + subtitulo).
         user = QWidget()
         uv = QVBoxLayout(user)
-        uv.setContentsMargins(8, 4, 8, 12)
+        uv.setContentsMargins(8, 4, 8, 14)
         uv.setSpacing(1)
         name = QLabel("Lumen")
         name.setObjectName("navUser")
@@ -59,9 +97,12 @@ class NavRail(QFrame):
         v.addWidget(user)
 
         self._buttons: dict[str, QPushButton] = {}
-        for title, sub in titles:
-            btn = QPushButton(title)
+        for title, sub, glyph in items:
+            btn = QPushButton(f"{ICONS[glyph]}   {title}")
             btn.setObjectName("navItem")
+            # A fonte de icones precisa ir no botao inteiro, senao o QSS
+            # (Segoe UI) sobrescreve e o glyph vira texto.
+            btn.setFont(icon_font(10))
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setToolTip(sub)
@@ -69,7 +110,7 @@ class NavRail(QFrame):
             self._buttons[title] = btn
             v.addWidget(btn)
         v.addStretch(1)
-        self.select(titles[0][0])
+        self.select(items[0][0])
 
     def select(self, title: str) -> None:
         for t, b in self._buttons.items():
@@ -84,18 +125,21 @@ class NavRail(QFrame):
 
 
 class CardRow(QFrame):
-    """Linha de card: titulo + subtitulo + controle opcional.
+    """Linha de card: icone + titulo + subtitulo + controle/chevron.
 
-    Reproduz o bloco do Windows 11 (icone, titulo, descricao, chevron),
+    Reproduz o bloco do Windows 11 (icone, titulo, descricao, seta),
     com hover no card inteiro em vez de so no texto.
     """
 
-    def __init__(self, title: str, subtitle: str = "", control=None, parent=None):
+    def __init__(self, title: str, subtitle: str = "", icon: str = "",
+                 control=None, chevron: bool = False, parent=None):
         super().__init__(parent)
         self.setObjectName("cardRow")
         h = QHBoxLayout(self)
         h.setContentsMargins(16, 12, 16, 12)
         h.setSpacing(14)
+        if icon:
+            h.addWidget(IconGlyph(icon))
         col = QVBoxLayout()
         col.setSpacing(2)
         lbl = QLabel(title)
@@ -110,6 +154,8 @@ class CardRow(QFrame):
         self._slot = h
         if control is not None:
             self.add_control(control)
+        if chevron:
+            h.addWidget(Chevron())
 
     def add_control(self, widget) -> None:
         """Adiciona o controle do lado direito da linha."""
@@ -117,27 +163,53 @@ class CardRow(QFrame):
 
 
 class Card(QFrame):
-    """Card com titulo de secao e linhas empilhadas (padrao Win11)."""
+    """Card estilo Windows 11: conteudo proprio, largura cheia."""
 
-    def __init__(self, title: str = "", parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("card")
-        v = QVBoxLayout(self)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(0)
-        self._v = v
-        if title:
-            head = QLabel(title)
-            head.setObjectName("sectionTitle")
-            # Alinha com o texto das linhas (que tem padding de 16px).
-            wrap = QWidget()
-            hv = QVBoxLayout(wrap)
-            hv.setContentsMargins(16, 0, 0, 0)
-            hv.addWidget(head)
-            v.addWidget(wrap)
+        self._v = QVBoxLayout(self)
+        self._v.setContentsMargins(0, 0, 0, 0)
+        self._v.setSpacing(0)
 
-    def add(self, widget) -> None:
-        self._v.addWidget(widget)
+    def add(self, widget, stretch: int = 0) -> None:
+        self._v.addWidget(widget, stretch)
+
+
+class HeroCard(QFrame):
+    """Bloco de identidade no topo da pagina, como o card de dispositivo
+    do Sistema do Windows 11: icone grande + nome + subtitulo + acoes."""
+
+    def __init__(self, icon_key: str, name: str, subtitle: str = "",
+                 parent=None):
+        super().__init__(parent)
+        self.setObjectName("hero")
+        h = QHBoxLayout(self)
+        h.setContentsMargins(20, 18, 20, 18)
+        h.setSpacing(16)
+
+        ic = QLabel(ICONS.get(icon_key, ""))
+        ic.setObjectName("heroIcon")
+        ic.setFixedSize(48, 48)
+        ic.setFont(icon_font(24))
+        ic.setAlignment(Qt.AlignCenter)
+        h.addWidget(ic)
+
+        col = QVBoxLayout()
+        col.setSpacing(1)
+        self.lbl_name = QLabel(name)
+        self.lbl_name.setObjectName("heroName")
+        col.addWidget(self.lbl_name)
+        if subtitle:
+            self.lbl_sub = QLabel(subtitle)
+            self.lbl_sub.setObjectName("heroSub")
+            self.lbl_sub.setWordWrap(True)
+            col.addWidget(self.lbl_sub)
+        h.addLayout(col, 1)
+        self._slot = h
+
+    def add_action(self, widget, stretch: int = 0) -> None:
+        self._slot.addWidget(widget, stretch, Qt.AlignVCenter)
 
 # Teclas aceitas pelo dialogo de captura. O campo de texto antigo aceitava
 # qualquer nome de `VK_NAMES`, mas `normalize_keybind` so sabe reescrever
@@ -277,9 +349,9 @@ class Banner(QFrame):
 class LabeledSlider(QWidget):
     """Slider com rotulo em coluna a esquerda e valor alinhado a direita.
 
-    Todos os sliders do app usam este template, entao os rotulos ficam
-    alinhados entre si (antes cada um empilhava o texto acima do slider).
-    """
+O rotulo interno pode ser escondido (`lbl_title.hide()`) quando a linha
+de card ja mostra o titulo — assim o slider fica so trilha + valor.
+"""
 
     valueChanged = Signal(int)
     editingFinished = Signal()
@@ -293,7 +365,7 @@ class LabeledSlider(QWidget):
 
         self.lbl_title = QLabel(title)
         self.lbl_title.setMinimumWidth(76)
-        self.lbl_title.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(lo, hi)

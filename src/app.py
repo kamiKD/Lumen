@@ -17,8 +17,8 @@ from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFrame, QGroupBox, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox,
-    QPushButton, QSizePolicy, QStackedWidget, QStyle, QSystemTrayIcon,
-    QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QStyle,
+    QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
 from .settings_manager import SettingsManager
@@ -29,8 +29,9 @@ from .gamma_controller import (
 )
 from . import display_manager, gpu_detector, autostart, theme
 from .ui import (
-    Banner, Card, CardRow, Chip, DiagnosticsDialog, GammaCurve, KeyGrabDialog,
-    LabeledSlider, NAV_ITEMS, NavRail, ProfileList,
+    Banner, Card, CardRow, Chip, DiagnosticsDialog, GammaCurve,
+    HeroCard, KeyGrabDialog, LabeledSlider, NAV_ITEMS, NavRail, PageTitle,
+    ProfileList,
 )
 # Alias legado: codigo externo ainda pode importar nvidia_controller.
 from . import nvidia_controller  # noqa: F401
@@ -48,7 +49,7 @@ class _NavTabsShim:
     """
 
     def __init__(self, pages: dict, stack):
-        self._order = [t for t, _ in NAV_ITEMS]
+        self._order = [t for t, _s, _g in NAV_ITEMS]
         self._pages = pages
         self._stack = stack
 
@@ -205,18 +206,9 @@ class MainWindow(QMainWindow):
         c = QWidget()
         self.setCentralWidget(c)
         root = QVBoxLayout(c)
-        root.setContentsMargins(16, 14, 16, 14)
-        root.setSpacing(10)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        root.addWidget(self._build_header())
-
-        self.banner = Banner()
-        root.addWidget(self.banner)
-
-        # Navegacao lateral no estilo Windows 11 + pilha de paginas.
-        # Antes era um QTabWidget; as abas viraram itens da nav para casar
-        # com o visual do sistema. `tabs` continua existindo como atalho
-        # (os testes e o --ui-selfcheck usam `tabs.count()`/`tabText()`).
         split = QWidget()
         sh = QHBoxLayout(split)
         sh.setContentsMargins(0, 0, 0, 0)
@@ -226,10 +218,25 @@ class MainWindow(QMainWindow):
         self.nav.changed.connect(self._on_nav_changed)
         sh.addWidget(self.nav)
 
+        content = QWidget()
+        ch = QVBoxLayout(content)
+        ch.setContentsMargins(0, 0, 0, 0)
+        ch.setSpacing(0)
+        # Banner com recuo proprio (24px), igual ao das paginas.
+        self.banner = Banner()
+        ban_wrap = QWidget()
+        bw = QVBoxLayout(ban_wrap)
+        bw.setContentsMargins(24, 14, 24, 0)
+        bw.addWidget(self.banner)
+        ch.addWidget(ban_wrap)
+
         self.stack = QStackedWidget()
-        sh.addWidget(self.stack, 1)
+        ch.addWidget(self.stack, 1)
+        sh.addWidget(content, 1)
+        root.addWidget(split, 1)
+
         self._pages: dict[str, QWidget] = {}
-        for title, _sub in NAV_ITEMS:
+        for title, _sub, _g in NAV_ITEMS:
             page = {
                 "Gamma": self._build_tab_gamma,
                 "Perfis": self._build_tab_profiles,
@@ -237,7 +244,6 @@ class MainWindow(QMainWindow):
             }[title]()
             self._pages[title] = page
             self.stack.addWidget(page)
-        root.addWidget(split, 1)
 
         # Fachada de abas sobre o stack, so para os testes/diagnostico.
         self.tabs = _NavTabsShim(self._pages, self.stack)
@@ -250,132 +256,142 @@ class MainWindow(QMainWindow):
         self.lbl_status.hide()
         root.addWidget(self.lbl_status)
 
-    def _build_header(self):
-        hdr = QFrame()
-        hdr.setObjectName("header")
-        h = QHBoxLayout(hdr)
-        h.setContentsMargins(16, 10, 14, 10)
-        h.setSpacing(10)
-        # O monitor e o unico que cede espaco (elida); todo o resto e fixo.
-        h.setStretch(0, 0)
+    def _on_nav_changed(self, title: str) -> None:
+        self.tabs.setCurrentIndex_by_title(title)
 
-        self.status_pill = Chip("● Gamma OFF", "off")
+    # ------------------------------------------------------- UI: pagina Gamma
+    def _build_tab_gamma(self):
+        """Pagina Gamma, no formato do painel do Windows 11:
+
+        titulo grande -> card de identidade (monitor + toggle) ->
+        card com os tres sliders -> card da curva.
+        """
+        page = QWidget()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        v = QVBoxLayout(inner)
+        v.setContentsMargins(24, 20, 24, 24)
+        # 4px entre cards, como a distancia entre blocos do Win11.
+        v.setSpacing(4)
+        scroll.setWidget(inner)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(scroll)
+
+        v.addWidget(PageTitle("Gamma"))
+
+        # --- card de identidade: icone + monitor + toggle
+        hero = HeroCard("monitor", "Monitor", "HDR desligado")
+        self.cmb_monitor = QComboBox()
+        # Mostra o nome completo e deixa o card ditar a largura: o
+        # AdjustToMinimumContentsLength elidia com "!" e ficava feio.
+        self.cmb_monitor.setSizeAdjustPolicy(
+            QComboBox.AdjustToContents)
+        self.cmb_monitor.setMinimumContentsLength(14)
+        self.cmb_monitor.setMinimumWidth(200)
+        self.cmb_monitor.setToolTip("Monitor alvo para a curva de gamma.")
+        self.cmb_monitor.currentIndexChanged.connect(self._on_monitor_changed)
+        hero.add_action(self.cmb_monitor)
+
+        self.status_pill = Chip("Gamma OFF", "off")
         self.status_pill.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        h.addWidget(self.status_pill)
+        hero.add_action(self.status_pill)
+
+        # Chip de HDR: fica no hero, que e onde o usuario procura estado do
+        # monitor. A largura e fixada em _update_monitor_labels, ja com o
+        # stylesheet aplicado: medir antes do polish daria um numero
+        # diferente do que o Qt usa de verdade.
+        self.hdr_chip = Chip("HDR", "off")
+        self.hdr_chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.hdr_chip.setToolTip("Estado do HDR no monitor selecionado.")
+        hero.add_action(self.hdr_chip)
 
         self.btn_toggle = QPushButton("Ligar gamma")
         self.btn_toggle.setObjectName("heroToggle")
         self.btn_toggle.setCheckable(True)
-        # Fixed/Minimum: e o botao principal e nunca pode ser cortado nem
-        # elidado ("jar gamm" ja aconteceu com o header apertado).
         self.btn_toggle.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.btn_toggle.setMinimumWidth(self.btn_toggle.sizeHint().width())
         self.btn_toggle.setToolTip(
             "Liga/desliga a curva de gamma. Atalho global funciona minimizado.")
         self.btn_toggle.clicked.connect(self._on_toggle_btn)
-        h.addWidget(self.btn_toggle)
+        hero.add_action(self.btn_toggle)
+        v.addWidget(hero)
 
-        self.btn_reset = QPushButton("Restaurar")
-        self.btn_reset.setToolTip("Volta a rampa original do monitor (gamma neutro).")
-        self.btn_reset.clicked.connect(lambda: self._manual_set(False))
-        h.addWidget(self.btn_reset)
-
-        h.addStretch(1)
-
-        self.cmb_monitor = QComboBox()
-        # E o widget que deve ceder espaco: elida o nome do monitor em vez de
-        # empurrar os botoes. Expanding + minimo curto = encolhe com elegancia.
-        self.cmb_monitor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.cmb_monitor.setMinimumWidth(110)
-        self.cmb_monitor.setSizeAdjustPolicy(
-            QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self.cmb_monitor.setMinimumContentsLength(12)
-        self.cmb_monitor.setToolTip("Monitor alvo para a curva de gamma.")
-        self.cmb_monitor.currentIndexChanged.connect(self._on_monitor_changed)
-        h.addWidget(self.cmb_monitor, 1)
-
-        self.hdr_chip = Chip("HDR", "off")
-        self.hdr_chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.hdr_chip.setToolTip("Estado do HDR no monitor selecionado.")
-        h.addWidget(self.hdr_chip)
-        # O chip muda de texto depois ("HDR desligado"). A largura e fixada em
-        # _update_monitor_labels, ja com o stylesheet aplicado: medir antes do
-        # polish daria um numero diferente do que o Qt usa de verdade.
-
-        self.btn_diag = QPushButton("Diagnostico")
-        self.btn_diag.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.btn_diag.setToolTip("GPU, driver, monitores, resolucao e erro tecnico.")
-        self.btn_diag.clicked.connect(self._open_diagnostics)
-        h.addWidget(self.btn_diag)
-        return hdr
-
-    def _on_nav_changed(self, title: str) -> None:
-        self.tabs.setCurrentIndex_by_title(title)
-
-    # ------------------------------------------------------- UI: aba Gamma
-    def _build_tab_gamma(self):
-        page = QWidget()
-        h = QHBoxLayout(page)
-        h.setContentsMargins(28, 24, 28, 24)
-        h.setSpacing(20)
-
-        # Sliders section (primary focus) — no GroupBox, clean rows
-        sliders_widget = QWidget()
-        v = QVBoxLayout(sliders_widget)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(16)
-        # Alinha ao topo e nao centraliza: os tres sliders ficam agrupados
-        # no alto, como no painel do Windows 11, em vez de flutuar no meio.
-        v.setAlignment(Qt.AlignTop)
-        self.sld_gamma = LabeledSlider("Gamma", 10, 500, "{}", parent=page)
-        self.sld_bri = LabeledSlider("Brilho", 0, 100, "{}%", parent=page)
-        self.sld_con = LabeledSlider("Contraste", 0, 100, "{}%", parent=page)
-        for s in (self.sld_gamma, self.sld_bri, self.sld_con):
+        # --- card dos sliders
+        card_sliders = Card()
+        slider_specs = (("Gamma", 10, 500, "{}"),
+                        ("Brilho", 0, 100, "{}%"),
+                        ("Contraste", 0, 100, "{}%"))
+        sliders = [LabeledSlider(title, lo, hi, fmt, parent=card_sliders)
+                   for title, lo, hi, fmt in slider_specs]
+        self.sld_gamma, self.sld_bri, self.sld_con = sliders
+        for s in sliders:
             s.valueChanged.connect(self._on_gamma_ui)
             s.editingFinished.connect(self._persist_current)
-            v.addWidget(s)
+            row = CardRow(s.lbl_title.text(), "", icon="brightness")
+            s.setMinimumWidth(280)
+            # O rotulo ja aparece no titulo da linha: esconde o interno
+            # do LabeledSlider para nao repetir "Gamma Gamma".
+            s.lbl_title.hide()
+            row.add_control(s)
+            card_sliders.add(row)
+        v.addWidget(card_sliders)
 
-        v.addSpacing(4)
-        self.lbl_live = QLabel()
-        self.lbl_live.setObjectName("subtitle")
-        self.lbl_live.setWordWrap(True)
-        v.addWidget(self.lbl_live)
-        v.addStretch(1)
-        sliders_widget.setMinimumWidth(300)
-        h.addWidget(sliders_widget, 4)
-
-        # Curve section (smaller, subtle)
-        curve = QFrame()
-        curve.setObjectName("curvePanel")
-        # Card da curva, como os cards do Windows 11 (fundo + borda sutil).
-        curve.setProperty("card", True)
-        cv = QVBoxLayout(curve)
-        cv.setContentsMargins(16, 14, 16, 14)
-        cv.setSpacing(8)
-        ttl = QLabel("Curva resultante")
-        ttl.setObjectName("subtitle")
-        self.gamma_curve = GammaCurve(curve)
-        # O painel da curva fica com largura minima propria: sem isso ele
-        # aceita encolher e invade a coluna dos sliders.
-        curve.setMinimumWidth(230)
+        # --- card da curva
+        self.gamma_curve = GammaCurve(inner)
         self.gamma_curve.setToolTip(
             "Previa da curva de transferencia. O tracejado e a curva neutra "
             "(gamma 1.0). Abaixo da diagonal escurece as sombras; acima, clareia.")
-        cv.addWidget(ttl)
-        cv.addWidget(self.gamma_curve, 1)
-        h.addWidget(curve, 2)
+        card_curve = Card()
+        card_curve.add(self.gamma_curve, 1)
+        v.addWidget(card_curve, 1)
+
+        # --- card de acoes secundarias
+        card_act = Card()
+        self.btn_reset = QPushButton("Restaurar")
+        self.btn_reset.setToolTip("Volta a rampa original do monitor (gamma neutro).")
+        self.btn_reset.clicked.connect(lambda: self._manual_set(False))
+        card_act.add(CardRow(
+            "Restaurar o gamma original",
+            "Volta a rampa neutra do monitor", "refresh", self.btn_reset))
+        self.btn_diag = QPushButton("Diagnostico")
+        self.btn_diag.setToolTip("GPU, driver, monitores, resolucao e erro tecnico.")
+        self.btn_diag.clicked.connect(self._open_diagnostics)
+        card_act.add(CardRow(
+            "Diagnostico",
+            "GPU, driver, monitores, resolucao e erro tecnico",
+            "repair", self.btn_diag))
+        v.addWidget(card_act)
+
+        # estado de referencia (usado por _set_gamma_state / banner de HDR)
+        self.lbl_live = QLabel()
+        self.lbl_live.setObjectName("subtitle")
+        self.lbl_live.setWordWrap(True)
+        self.lbl_live.hide()
+
+        v.addStretch(1)
         return page
 
     # ------------------------------------------------------ UI: aba Perfis
     def _build_tab_profiles(self):
         page = QWidget()
-        v = QVBoxLayout(page)
-        v.setContentsMargins(28, 24, 28, 24)
-        v.setSpacing(10)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        v = QVBoxLayout(inner)
+        v.setContentsMargins(24, 20, 24, 24)
+        v.setSpacing(4)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
-        self.profile_list = ProfileList(page)
-        # Espaco extra embaixo: com 9 perfis o ultimo item ficava cortado
-        # dentro da area rolavel.
+        v.addWidget(PageTitle("Perfis"))
+
+        self.profile_list = ProfileList(inner)
+        # Espaco extra embaixo: com 9 perfis o ultimo item ficava cortado.
         self.profile_list.setStyleSheet("QListWidget { padding-bottom: 10px; }")
         self.profile_list.currentItemChanged.connect(
             lambda cur, _prev: self._on_profile_selected(
@@ -384,7 +400,9 @@ class MainWindow(QMainWindow):
             lambda it: self._on_profile_selected(it.data(Qt.UserRole)))
         self.profile_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.profile_list.customContextMenuRequested.connect(self._profile_menu)
-        v.addWidget(self.profile_list, 1)
+        card_list = Card()
+        card_list.add(self.profile_list, 1)
+        v.addWidget(card_list, 1)
 
         hint = QLabel("Duplo clique aplica. Clique direito: salvar, renomear, "
                       "duplicar, excluir. O asterisco marca alteracoes nao salvas.")
@@ -392,7 +410,9 @@ class MainWindow(QMainWindow):
         hint.setWordWrap(True)
         v.addWidget(hint)
 
+        card_btns = Card()
         row = QHBoxLayout()
+        row.setContentsMargins(14, 12, 14, 12)
         row.setSpacing(8)
         self.btn_profile_save = QPushButton("Salvar")
         self.btn_profile_save.setProperty("variant", "primary")
@@ -414,63 +434,81 @@ class MainWindow(QMainWindow):
         self.lbl_profile_info = QLabel()
         self.lbl_profile_info.setObjectName("hint")
         row.addWidget(self.lbl_profile_info)
-        v.addLayout(row)
+        card_btns._v.addLayout(row)
+        v.addWidget(card_btns)
         return page
 
     # ------------------------------------------------------ UI: aba Opcoes
     def _build_tab_options(self):
         page = QWidget()
-        v = QVBoxLayout(page)
-        v.setContentsMargins(28, 24, 28, 24)
-        v.setSpacing(18)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        v = QVBoxLayout(inner)
+        v.setContentsMargins(24, 20, 24, 24)
+        v.setSpacing(4)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
-        # --- Card: atalho global (linha com campo + botoes, estilo Win11)
-        card_key = Card("Atalho global")
-        row_key = CardRow(
-            "Alternar gamma",
-            "Ex.: F8, CTRL+F8, ALT+F8, CTRL+ALT+G. Capturar aceita F1-F24, "
-            "letras e numeros.")
+        v.addWidget(PageTitle("Opcoes"))
+
+        # --- atalho global
         self.edt_key = QLineEdit()
         self.edt_key.setReadOnly(True)
         self.edt_key.setPlaceholderText("F8")
-        self.edt_key.setFixedWidth(150)
+        self.edt_key.setFixedWidth(140)
         btn_cap = QPushButton("Capturar")
         btn_cap.setToolTip("Clique e pressione a combinacao desejada.")
         btn_cap.clicked.connect(self._on_keybind_capture)
         btn_key = QPushButton("Aplicar")
         btn_key.setProperty("variant", "primary")
         btn_key.clicked.connect(self._on_keybind_apply)
+        kb_row = QWidget()
+        kb_row.setObjectName("inlineRow")
+        kh = QHBoxLayout(kb_row)
+        kh.setContentsMargins(16, 0, 16, 12)
+        kh.setSpacing(8)
         for w in (self.edt_key, btn_cap, btn_key):
-            row_key.add_control(w)
-        card_key.add(row_key)
+            kh.addWidget(w)
+        card_key = Card()
+        card_key.add(CardRow(
+            "Atalho global",
+            "Ex.: F8, CTRL+F8, ALT+F8, CTRL+ALT+G. Capturar aceita F1-F24, "
+            "letras e numeros.", "key"))
+        card_key.add(kb_row)
         v.addWidget(card_key)
 
-        # --- Card: opcoes de inicializacao (uma linha por checkbox)
-        card_start = Card("Inicializacao")
+        # --- inicializacao
         # O texto vem do CardRow (titulo da linha); o QCheckBox fica sem
         # label para nao repetir a mesma frase duas vezes.
+        card_start = Card()
         self.chk_restore = QCheckBox()
         self.chk_restore.toggled.connect(lambda v: self.s.set("restore_on_exit", v))
         card_start.add(CardRow(
             "Restaurar o gamma original ao sair",
-            "Volta a rampa neutra do monitor ao fechar o app.", self.chk_restore))
+            "Volta a rampa neutra do monitor ao fechar o app.",
+            "refresh", self.chk_restore))
 
         self.chk_autostart = QCheckBox()
         self.chk_autostart.toggled.connect(self._on_autostart)
         card_start.add(CardRow(
             "Iniciar com o Windows",
             "Adiciona o Lumen na inicializacao automatica (HKCU Run).",
-            self.chk_autostart))
+            "sync", self.chk_autostart))
 
         self.chk_min = QCheckBox()
         self.chk_min.toggled.connect(lambda v: self.s.set("start_minimized", v))
         card_start.add(CardRow(
             "Iniciar minimizado",
-            "Abre direto na bandeja, sem mostrar a janela.", self.chk_min))
+            "Abre direto na bandeja, sem mostrar a janela.",
+            "power", self.chk_min))
         v.addWidget(card_start)
 
-        # --- Card: tema
-        card_theme = Card("Aparencia")
+        # --- aparencia
+        card_theme = Card()
         self.cmb_theme = QComboBox()
         self.cmb_theme.setFixedWidth(210)
         for key, label in (("auto", "Automatico (seguir o Windows)"),
@@ -482,7 +520,7 @@ class MainWindow(QMainWindow):
         card_theme.add(CardRow(
             "Tema",
             "Automatico acompanha a configuracao de cor do Windows.",
-            self.cmb_theme))
+            "color", self.cmb_theme))
         v.addWidget(card_theme)
 
         v.addStretch(1)

@@ -11,7 +11,7 @@ from __future__ import annotations
 from string import Template
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QFont, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
 # ---------------------------------------------------------------- tokens
@@ -22,13 +22,38 @@ from PySide6.QtWidgets import QApplication
 SPACE = {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24}
 RADIUS = 6
 FONT_PT = 10
-FONT_STACK = '"Segoe UI", "Inter", system-ui, sans-serif'
+# Segoe UI Variable e a fonte do Windows 11; cai para Segoe UI se faltar.
+FONT_STACK = '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif'
 MONO_STACK = '"Cascadia Mono", Consolas, "Courier New", monospace'
+
+# Fonte de icones do Windows (Segoe Fluent/MDL2). Verificado em tempo de
+# execucao por `icon_font()`: se a fonte nao existir, a UI cai para texto.
+ICON_FONT = "Segoe MDL2 Assets"
+
+# Glifos (codepoints estaveis do MDL2, conferidos por renderizacao).
+ICONS = {
+    "monitor":    "\ue7f4",
+    "brightness": "\ue706",
+    "settings":   "\ue713",
+    "chevron":    "\ue76c",
+    "refresh":    "\ue72c",
+    "color":      "\ue790",
+    "keyboard":   "\ue765",
+    "power":      "\ue7e8",
+    "devices":    "\ue772",
+    "user":       "\ue77b",
+    "repair":     "\ue7f3",
+    "save":       "\ue8bb",
+    "key":        "\ue192",
+    "sync":       "\ue895",
+    "sounds":     "\ue767",
+}
 
 LIGHT = {
     # Paleta do Windows 11: fundo #f3f3f3 (Fluent), cards brancos, acento
     # azul do sistema, selecao de nav cinza-azulada translucida.
     "bg": "#f3f3f3",
+    "handle": "#ffffff",
     "surface": "#ffffff",
     "surface_alt": "#f9f9f9",
     "nav": "#f3f3f3",
@@ -60,6 +85,7 @@ DARK = {
     # Windows 11 escuro: fundo #202020, cards #2b2b2b, acento #4cc2ff,
     # selecao de nav com pílula translucida sobre o fundo.
     "bg": "#202020",
+    "handle": "#ffffff",
     "surface": "#2b2b2b",
     "surface_alt": "#323232",
     "nav": "#202020",
@@ -158,46 +184,56 @@ QGroupBox::title {
     color: ${text_muted};
 }
 
-/* ---------------------------------------------------------- botoes */
+/* ---------------------------------------------------------- botoes
+   Botao padrao do Win11: superficie sutil, borda de 1px, raio 4, texto
+   10pt. Primario leva o acento. */
 QPushButton {
-    background: ${surface};
+    background: ${surface_alt};
     border: 1px solid ${border_strong};
-    border-radius: ${radius}px;
-    padding: 6px 14px;
+    border-radius: 4px;
+    padding: 5px 12px;
     color: ${text};
-    transition: background 120ms, border-color 120ms;
+    font-size: ${font_pt}pt;
 }
-QPushButton:hover { background: ${surface_alt}; border-color: ${accent}; }
-QPushButton:pressed { background: ${bg}; }
-QPushButton:disabled { color: ${text_faint}; border-color: ${border}; background: ${surface_alt}; }
+QPushButton:hover { background: ${surface_alt}; border-color: ${text_faint}; }
+QPushButton:pressed { background: ${border}; }
+QPushButton:disabled {
+    color: ${text_faint}; border-color: ${border};
+    background: ${surface_alt};
+}
 QPushButton:focus { border-color: ${accent}; }
 
 QPushButton[variant="primary"] {
-    background: ${accent}; color: #ffffff; border-color: ${accent}; font-weight: 600;
+    background: ${accent};
+    color: ${bg};
+    border-color: ${accent};
+    font-weight: 600;
 }
 QPushButton[variant="primary"]:hover { background: ${accent_hover}; border-color: ${accent_hover}; }
-QPushButton[variant="primary"]:disabled { background: ${border_strong}; color: ${off_soft}; border-color: ${border}; }
+QPushButton[variant="primary"]:disabled {
+    background: ${border}; color: ${text_faint}; border-color: ${border};
+}
 
 QPushButton[variant="danger"] { color: ${error}; border-color: ${error_border}; }
 QPushButton[variant="danger"]:hover { background: ${error_soft}; border-color: ${error}; }
 QPushButton[variant="danger"]:disabled { color: ${text_faint}; border-color: ${border}; background: ${surface_alt}; }
 
-/* Toggle principal: botao de acao primaria, nao um hero dominante. */
+/* Toggle principal do cabecalho: estilo de switch do Win11 (pilula). */
 QPushButton#heroToggle {
     padding: 7px 20px;
     font-size: 10.5pt;
     font-weight: 600;
-    border-radius: 7px;
+    border-radius: 100px;
+    min-width: 120px;
 }
 QPushButton#heroToggle:checked {
-    background: ${on}; border-color: ${on_deep};
-    color: #ffffff;
+    background: ${on}; border-color: ${on_deep}; color: #ffffff;
 }
 QPushButton#heroToggle:checked:hover { background: ${on_deep}; }
 QPushButton#heroToggle:!checked {
-    background: ${surface}; border: 1px solid ${border_strong}; color: ${text};
+    background: ${accent_soft}; border: 1px solid ${accent}; color: ${accent};
 }
-QPushButton#heroToggle:!checked:hover { border-color: ${accent}; background: ${surface_alt}; }
+QPushButton#heroToggle:!checked:hover { background: ${accent_soft}; }
 
 /* ---------------------------------------------------------- entradas */
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
@@ -221,16 +257,32 @@ QComboBox QAbstractItemView {
     outline: 0;
 }
 
-/* ---------------------------------------------------------- sliders */
-QSlider::groove:horizontal { height: 4px; background: ${track}; border-radius: 2px; }
+/* ---------------------------------------------------------- sliders
+   Padrao Win11: trilha fina de 4px, preenchida com o acento, e handle
+   circular de 20px branco com borda sutil. */
+QSlider::groove:horizontal {
+    height: 4px; background: ${track}; border-radius: 2px;
+    border: none;
+}
 QSlider::sub-page:horizontal { background: ${accent}; border-radius: 2px; }
 QSlider::sub-page:horizontal:disabled { background: ${track}; }
+QSlider::add-page:horizontal { background: ${track}; border-radius: 2px; }
 QSlider::handle:horizontal {
-    width: 14px; margin: -5px 0;
-    background: ${surface}; border: 2px solid ${accent}; border-radius: 7px;
+    width: 20px; height: 20px;
+    margin: -8px 0;
+    background: ${handle};
+    border: 1px solid ${border_strong};
+    border-radius: 11px;
 }
-QSlider::handle:horizontal:hover { background: ${accent}; }
-QSlider::handle:horizontal:disabled { border-color: ${track}; background: ${surface_alt}; }
+QSlider::handle:horizontal:hover {
+    background: ${handle}; border-color: ${accent};
+}
+QSlider::handle:horizontal:pressed {
+    background: ${accent}; border-color: ${accent};
+}
+QSlider::handle:horizontal:disabled {
+    background: ${surface_alt}; border-color: ${border};
+}
 
 /* ---------------------------------------------------------- listas */
 QListWidget {
@@ -273,18 +325,18 @@ QTabBar::tab:selected {
 QTabBar::tab:hover:!selected { color: ${text}; background: ${surface_alt}; }
 
 /* ------------------------------------------------- navegacao lateral
-   Pilula de selecao como no Windows 11: item ativo ganha fundo
-   arredondado e uma barra de acento na esquerda. */
+   Item com icone + texto; o selecionado ganha pilula e uma barra de
+   acento de 3px na borda esquerda, como no painel do Windows 11. */
 QFrame#navRail {
     background: ${nav};
     border: none;
-    border-right: 1px solid ${border};
 }
 QPushButton#navItem {
     background: transparent;
     border: none;
     border-radius: 4px;
-    padding: 9px 12px;
+    border-left: 3px solid transparent;
+    padding: 9px 12px 9px 9px;
     text-align: left;
     color: ${text};
     font-size: ${font_pt}pt;
@@ -294,28 +346,47 @@ QPushButton#navItem:checked {
     background: ${nav_active};
     color: ${text};
     font-weight: 600;
+    border-left: 3px solid ${accent};
 }
 QLabel#navUser    { font-weight: 600; font-size: 11pt; }
 QLabel#navUserSub { color: ${text_muted}; font-size: 9pt; }
 
 /* ------------------------------------------------------ cartoes
-   Cards como os blocos do Windows 11: fundo ${surface}, borda sutil,
-   raio 8, e a linha interna com hover levemente destacado. */
+   Cards do painel do Windows 11: largura cheia, raio 8, borda sutil e
+   4px de distancia entre eles. */
 QFrame#card {
     background: ${surface};
     border: 1px solid ${border};
     border-radius: 8px;
 }
-QFrame#cardRow {
+QLabel#pageTitle {
+    font-size: 20pt;
+    font-weight: 600;
+    color: ${text};
     background: transparent;
-    border: none;
-    border-bottom: 1px solid ${border};
 }
-QFrame#cardRow:last { border-bottom: none; }
-QFrame#cardRow:hover { background: ${surface_alt}; }
-QLabel#cardTitle { font-weight: 600; font-size: ${font_pt}pt; }
-QLabel#cardSub   { color: ${text_muted}; font-size: 9pt; }
-QLabel#sectionTitle { font-size: 14pt; font-weight: 600; }
+QLabel#cardIcon {
+    font-family: "${icon_font}";
+    color: ${text};
+    background: transparent;
+}
+QLabel#cardSub { color: ${text_muted}; font-size: 9pt; background: transparent; }
+QLabel#cardTitle { font-weight: 600; background: transparent; }
+
+/* Hero: bloco de identidade no topo da pagina, como o do Sistema. */
+QFrame#hero {
+    background: ${surface};
+    border: 1px solid ${border};
+    border-radius: 8px;
+}
+QLabel#heroName { font-size: 13pt; font-weight: 600; background: transparent; }
+QLabel#heroSub  { color: ${text_muted}; font-size: 9pt; background: transparent; }
+QLabel#heroIcon {
+    font-family: "${icon_font}";
+    font-size: 26pt;
+    color: ${text};
+    background: transparent;
+}
 
 /* ---------------------------------------------------------- chips */
 QLabel#chip {
@@ -397,7 +468,29 @@ def build_qss(tokens: dict) -> str:
     base["mono_stack"] = MONO_STACK
     base["font_pt"] = FONT_PT
     base["radius"] = RADIUS
+    base["icon_font"] = ICON_FONT
     return _QSS.substitute(base)
+
+
+def icon_font(size_pt: int = 16) -> "QFont":
+    """Fonte de icones do Windows. Vazia se a fonte nao existir na maquina."""
+    if ICON_FONT not in _available_fonts():
+        return QFont()
+    f = QFont(ICON_FONT)
+    f.setPointSize(size_pt)
+    return f
+
+
+def _available_fonts() -> set:
+    global _FONTS_CACHE
+    if _FONTS_CACHE is None:
+        from PySide6.QtGui import QFontDatabase
+        app = QApplication.instance()
+        _FONTS_CACHE = set(QFontDatabase.families()) if app else set()
+    return _FONTS_CACHE
+
+
+_FONTS_CACHE = None
 
 
 def repolish(widget) -> None:
